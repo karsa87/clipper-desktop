@@ -1,0 +1,51 @@
+const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const path = require('path')
+
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 700,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
+    backgroundColor: '#0a0a0f',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false,
+    },
+    show: false,
+  })
+
+  win.once('ready-to-show', () => win.show())
+
+  if (isDev) {
+    win.loadURL('http://localhost:5173')
+    win.webContents.openDevTools({ mode: 'detach' })
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/index.html'))
+  }
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+}
+
+app.whenReady().then(() => {
+  createWindow()
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+ipcMain.handle('get-app-version', () => app.getVersion())
+ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
