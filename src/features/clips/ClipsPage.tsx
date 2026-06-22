@@ -111,9 +111,10 @@ export function ClipsPage() {
                         <Upload size={11} /> Export
                       </Button>
                     ) : clip.status === 'exported' && clip.file_path ? (
-                      <a href={`${backendUrl}/files/${encodeURIComponent(clip.file_path)}`} download
+                      <a href={`${backendUrl}/api/v1/clips/${clip.id}/download`} download
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-secondary transition-colors">
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-secondary transition-colors"
+                        target='_blank'>
                         <Download size={11} /> Download
                       </a>
                     ) : null}
