@@ -79,7 +79,8 @@ export function ExportsPage() {
                 </div>
                 <StatusBadge status="exported" />
                 {clip.file_path && (
-                  <a href={`${backendUrl}/files/${encodeURIComponent(clip.file_path)}`} download
+                  <a href={`${backendUrl}/api/v1/clips/${clip.id}/download`} download
+                    target="_blank"
                     className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-secondary transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Download size={14} />
