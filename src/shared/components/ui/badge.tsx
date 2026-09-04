@@ -32,6 +32,8 @@ function Badge({ className, variant, ...props }: BadgeProps) {
 type AnyStatus = string
 
 const STATUS_MAP: Record<string, { label: string; variant: BadgeProps['variant']; dot?: boolean }> = {
+  queued:       { label: 'Queued',       variant: 'muted',     dot: true },
+  downloading:  { label: 'Downloading',  variant: 'warning',   dot: true },
   uploaded:     { label: 'Uploaded',     variant: 'secondary', dot: true },
   transcribing: { label: 'Transcribing', variant: 'warning',   dot: true },
   transcribed:  { label: 'Transcribed',  variant: 'success',   dot: true },
@@ -50,7 +52,7 @@ interface StatusBadgeProps { status: AnyStatus; className?: string }
 
 function StatusBadge({ status, className }: StatusBadgeProps) {
   const cfg = STATUS_MAP[status] ?? { label: status, variant: 'muted' as const, dot: false }
-  const isPulsing = ['transcribing', 'analyzing', 'clipping'].includes(status)
+  const isPulsing = ['queued', 'downloading', 'transcribing', 'analyzing', 'clipping'].includes(status)
   return (
     <Badge variant={cfg.variant} className={cn('font-mono text-[11px]', className)}>
       {cfg.dot && (

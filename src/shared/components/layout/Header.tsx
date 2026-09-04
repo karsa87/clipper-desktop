@@ -27,20 +27,22 @@ export function Header() {
 
   return (
     <TooltipProvider>
-      <header className="h-14 flex items-center justify-between px-5 border-b border-border glass shrink-0 drag-region sticky top-0 z-10">
-        <h1 className="text-sm font-semibold no-drag">{label}</h1>
+      <header className="h-16 flex items-center justify-between px-6 border-b border-border/80 glass shrink-0 drag-region sticky top-0 z-20">
+        <div className="flex items-center gap-3 no-drag">
+          <h1 className="text-base font-semibold tracking-tight text-foreground">{label}</h1>
+        </div>
 
-        <div className="flex items-center gap-2 no-drag">
+        <div className="flex items-center gap-3 no-drag">
           <Tooltip>
             <TooltipTrigger asChild>
               <div className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors',
+                'flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors shadow-2xs',
                 online
-                  ? 'border-success/30 bg-success/5 text-success'
-                  : 'border-destructive/30 bg-destructive/5 text-destructive'
+                  ? 'border-success/30 bg-success/10 text-success'
+                  : 'border-destructive/30 bg-destructive/10 text-destructive'
               )}>
-                {online ? <Wifi size={11} /> : <WifiOff size={11} />}
-                {online ? 'Connected' : 'Disconnected'}
+                <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', online ? 'bg-success animate-pulse' : 'bg-destructive')} />
+                {online ? 'Backend Connected' : 'Engine Offline'}
               </div>
             </TooltipTrigger>
             <TooltipContent>

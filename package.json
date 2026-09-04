@@ -2,6 +2,7 @@
   "name": "clipper-desktop",
   "version": "0.1.0",
   "description": "AI Video Clipper Desktop App",
+  "type": "module",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",

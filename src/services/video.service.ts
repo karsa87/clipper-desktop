@@ -4,6 +4,9 @@ import type {
   Video,
   VideoListResponse,
   VideoUploadResponse,
+  VideoPreviewResponse,
+  VideoImportUrlRequest,
+  VideoUpdateRequest,
   Transcript,
   TranscribeRequest,
   Hook,
@@ -16,13 +19,54 @@ import type {
 } from '@/types'
 
 export const videoService = {
-  async upload(file: File): Promise<VideoUploadResponse> {
+  async upload(
+    file: File,
+    metadata?: {
+      title?: string
+      creator_account?: string
+      host_names?: string[]
+      guest_stars?: string[]
+    }
+  ): Promise<VideoUploadResponse> {
     const form = new FormData()
     form.append('file', file)
+    if (metadata?.title) form.append('title', metadata.title)
+    if (metadata?.creator_account) form.append('creator_account', metadata.creator_account)
+    if (metadata?.host_names && metadata.host_names.length > 0) {
+      form.append('host_names', JSON.stringify(metadata.host_names))
+    }
+    if (metadata?.guest_stars && metadata.guest_stars.length > 0) {
+      form.append('guest_stars', JSON.stringify(metadata.guest_stars))
+    }
+
     const res = await getApiClient().post<APIResponse<VideoUploadResponse>>(
       '/api/v1/videos/upload',
       form,
       { headers: { 'Content-Type': 'multipart/form-data' } }
+    )
+    return res.data.data!
+  },
+
+  async previewUrl(url: string): Promise<VideoPreviewResponse> {
+    const res = await getApiClient().post<APIResponse<VideoPreviewResponse>>(
+      '/api/v1/videos/preview-url',
+      { url }
+    )
+    return res.data.data!
+  },
+
+  async importUrl(payload: VideoImportUrlRequest): Promise<Video> {
+    const res = await getApiClient().post<APIResponse<Video>>(
+      '/api/v1/videos/import-url',
+      payload
+    )
+    return res.data.data!
+  },
+
+  async updateDetails(id: string, payload: VideoUpdateRequest): Promise<Video> {
+    const res = await getApiClient().patch<APIResponse<Video>>(
+      `/api/v1/videos/${id}`,
+      payload
     )
     return res.data.data!
   },
@@ -39,8 +83,17 @@ export const videoService = {
     return res.data.data!
   },
 
-  async delete(id: string): Promise<void> {
-    await getApiClient().delete(`/api/v1/videos/${id}`)
+  async delete(id: string): Promise<{ video_id: string; deleted_files_count: number }> {
+    const res = await getApiClient().delete<APIResponse<{ video_id: string; deleted_files_count: number }>>(
+      `/api/v1/videos/${id}`
+    )
+    return res.data.data!
+  },
+
+  getStreamUrl(videoId: string): string {
+    const { backendUrl } = (window as Window & { __settingsStore?: { backendUrl: string } })
+      .__settingsStore ?? { backendUrl: 'http://localhost:8000' }
+    return `${backendUrl}/api/v1/videos/${videoId}/stream`
   },
 
   // Transcript

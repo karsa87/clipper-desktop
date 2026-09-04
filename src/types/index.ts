@@ -6,7 +6,11 @@ export interface APIResponse<T> {
 }
 
 // ─── Video ───────────────────────────────────────────────────────────────────
+export type VideoSourceType = 'local' | 'url'
+
 export type VideoStatus =
+  | 'queued'
+  | 'downloading'
   | 'uploaded'
   | 'transcribing'
   | 'transcribed'
@@ -20,11 +24,19 @@ export interface Video {
   id: string
   filename: string
   file_path: string
+  title: string
+  source_type: VideoSourceType
+  source_url?: string | null
+  creator_account?: string | null
+  host_names: string[]
+  guest_stars: string[]
   duration_seconds: number | null
   fps: number | null
   width: number | null
   height: number | null
   status: VideoStatus
+  download_progress?: number
+  error_message?: string | null
   created_at: string
   updated_at: string
 }
@@ -32,7 +44,31 @@ export interface Video {
 export interface VideoUploadResponse {
   video_id: string
   filename: string
+  title: string
   status: VideoStatus
+}
+
+export interface VideoPreviewResponse {
+  title?: string | null
+  channel?: string | null
+  thumbnail?: string | null
+  duration_seconds?: number | null
+  platform?: string | null
+}
+
+export interface VideoImportUrlRequest {
+  url: string
+  title?: string
+  creator_account?: string
+  host_names?: string[]
+  guest_stars?: string[]
+}
+
+export interface VideoUpdateRequest {
+  title?: string
+  creator_account?: string
+  host_names?: string[]
+  guest_stars?: string[]
 }
 
 export interface VideoListResponse {

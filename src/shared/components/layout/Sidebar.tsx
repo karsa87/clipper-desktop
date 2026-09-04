@@ -31,19 +31,22 @@ export function Sidebar() {
 
         {/* Logo */}
         <div className={cn(
-          'flex items-center h-14 px-3 border-b border-border drag-region shrink-0',
-          sidebarCollapsed ? 'justify-center' : 'gap-2.5'
+          'flex items-center h-16 px-3.5 border-b border-border/80 drag-region shrink-0',
+          sidebarCollapsed ? 'justify-center' : 'gap-3'
         )}>
-          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0 no-drag glow-primary">
-            <Clapperboard size={14} className="text-primary-foreground" />
+          <div className="w-8 h-8 rounded-xl gradient-brand flex items-center justify-center shrink-0 no-drag glow-primary shadow-sm">
+            <Clapperboard size={16} className="text-white" />
           </div>
           {!sidebarCollapsed && (
-            <span className="text-sm font-semibold no-drag">Clipper</span>
+            <div className="flex flex-col no-drag">
+              <span className="text-sm font-bold tracking-tight gradient-text">Clipper AI</span>
+              <span className="text-[10px] text-muted-foreground leading-none font-medium">Studio Engine</span>
+            </div>
           )}
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
           {NAV.map(({ to, icon: Icon, label }) => (
             <Tooltip key={to}>
               <TooltipTrigger asChild>
@@ -51,15 +54,15 @@ export function Sidebar() {
                   to={to}
                   end={to === '/'}
                   className={({ isActive }) => cn(
-                    'flex items-center gap-2.5 px-2.5 py-2 rounded-md text-xs font-medium transition-all group',
+                    'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all group relative',
                     isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary',
+                      ? 'bg-primary/15 text-primary font-semibold shadow-xs border border-primary/20'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60',
                     sidebarCollapsed && 'justify-center px-2'
                   )}
                 >
-                  <Icon size={15} className="shrink-0" />
-                  {!sidebarCollapsed && label}
+                  <Icon size={16} className="shrink-0" />
+                  {!sidebarCollapsed && <span>{label}</span>}
                 </NavLink>
               </TooltipTrigger>
               {sidebarCollapsed && (

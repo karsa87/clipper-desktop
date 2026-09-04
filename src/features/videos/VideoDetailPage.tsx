@@ -1,78 +1,124 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, FileText, Zap, Scissors, Video, Clock, ChevronRight, Play, RefreshCw, Info,
+  ArrowLeft,
+  FileText,
+  Zap,
+  Scissors,
+  Video as VideoIcon,
+  Clock,
+  ChevronRight,
+  Play,
+  RefreshCw,
+  Info,
+  Edit3,
+  Trash2,
+  Globe,
+  HardDrive,
+  User,
+  Users,
+  AtSign,
+  Sparkles,
 } from 'lucide-react'
 import { videoService } from '@/services/video.service'
 import { toast } from '@/shared/hooks/useToast'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { StatusBadge, ScoreBadge } from '@/shared/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/select'
 import { SkeletonCard } from '@/shared/components/ui/skeleton'
-import { EmptyState } from '@/shared/components/ui/empty-state'
 import { Progress } from '@/shared/components/ui/progress'
-import { formatDuration, formatTimestamp, formatRelativeTime, platformLabel } from '@/shared/utils'
+import {
+  formatDuration,
+  formatTimestamp,
+  formatRelativeTime,
+  platformLabel,
+} from '@/shared/utils'
 import type { TargetPlatform } from '@/types'
+import { VideoEditModal } from './VideoEditModal'
+import { VideoDeleteDialog } from './VideoDeleteDialog'
+import { VideoPlayerModal } from './VideoPlayerModal'
 
 const PLATFORMS: { value: TargetPlatform; label: string }[] = [
-  { value: 'youtube_shorts',  label: 'YouTube Shorts'  },
-  { value: 'tiktok',          label: 'TikTok'          },
+  { value: 'youtube_shorts', label: 'YouTube Shorts' },
+  { value: 'tiktok', label: 'TikTok' },
   { value: 'instagram_reels', label: 'Instagram Reels' },
-  { value: 'facebook_reels',  label: 'Facebook Reels'  },
+  { value: 'facebook_reels', label: 'Facebook Reels' },
 ]
 
-const PIPELINE_STAGES = ['uploaded','transcribed','analyzed','completed']
+const PIPELINE_STAGES = ['uploaded', 'transcribed', 'analyzed', 'completed']
 function pipelineProgress(status: string) {
   const idx = PIPELINE_STAGES.indexOf(status)
-  return idx < 0 ? (status === 'failed' ? 100 : 0) : Math.round(((idx) / (PIPELINE_STAGES.length - 1)) * 100)
+  return idx < 0
+    ? status === 'failed'
+      ? 100
+      : 0
+    : Math.round((idx / (PIPELINE_STAGES.length - 1)) * 100)
 }
 
 export function VideoDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const [selectedHooks, setSelectedHooks] = useState<string[]>([])
   const [platform, setPlatform] = useState<TargetPlatform>('youtube_shorts')
+
+  // Modals
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [playerModalOpen, setPlayerModalOpen] = useState(false)
 
   const { data: video, isLoading } = useQuery({
     queryKey: ['video', id],
     queryFn: () => videoService.get(id!),
     refetchInterval: (q) => {
       const s = q.state.data?.status
-      return s && ['transcribing','analyzing','clipping'].includes(s) ? 3000 : false
+      return s && ['queued', 'downloading', 'transcribing', 'analyzing', 'clipping'].includes(s)
+        ? 3000
+        : false
     },
   })
 
   const { data: transcript } = useQuery({
     queryKey: ['transcript', id],
     queryFn: () => videoService.getTranscript(id!),
-    enabled: !!video && !['uploaded','transcribing'].includes(video.status),
+    enabled: !!video && !['queued', 'downloading', 'uploaded', 'transcribing'].includes(video.status),
     retry: false,
   })
 
   const { data: hooksData } = useQuery({
     queryKey: ['hooks', id],
     queryFn: () => videoService.listHooks(id!),
-    enabled: !!video && ['analyzed','clipping','completed'].includes(video.status),
+    enabled: !!video && ['analyzed', 'clipping', 'completed'].includes(video.status),
     retry: false,
   })
 
   const { data: clipsData } = useQuery({
     queryKey: ['clips', id],
     queryFn: () => videoService.listClips(id!),
-    enabled: !!video && ['clipping','completed'].includes(video.status),
+    enabled: !!video && ['clipping', 'completed'].includes(video.status),
     retry: false,
   })
 
   const transcribeMutation = useMutation({
     mutationFn: () => videoService.transcribe(id!),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['video', id] }); toast.success('Transcription started') },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['video', id] })
+      toast.success('Transcription started')
+    },
     onError: (e: Error) => toast.error('Transcription failed', e.message),
   })
 
   const detectHooksMutation = useMutation({
-    mutationFn: () => videoService.detectHooks(id!, { max_hooks: 5, min_duration: 15, max_duration: 90 }),
+    mutationFn: () =>
+      videoService.detectHooks(id!, { max_hooks: 5, min_duration: 15, max_duration: 90 }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['video', id] })
       qc.invalidateQueries({ queryKey: ['hooks', id] })
@@ -82,10 +128,14 @@ export function VideoDetailPage() {
   })
 
   const extractMutation = useMutation({
-    mutationFn: () => videoService.extractClips(id!, {
-      hook_ids: selectedHooks.length > 0 ? selectedHooks : (hooksData?.items.map(h => h.id) ?? []),
-      target_platform: platform,
-    }),
+    mutationFn: () =>
+      videoService.extractClips(id!, {
+        hook_ids:
+          selectedHooks.length > 0
+            ? selectedHooks
+            : hooksData?.items.map((h) => h.id) ?? [],
+        target_platform: platform,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['video', id] })
       qc.invalidateQueries({ queryKey: ['clips', id] })
@@ -95,9 +145,15 @@ export function VideoDetailPage() {
   })
 
   const toggleHook = (hid: string) =>
-    setSelectedHooks(p => p.includes(hid) ? p.filter(h => h !== hid) : [...p, hid])
+    setSelectedHooks((p) => (p.includes(hid) ? p.filter((h) => h !== hid) : [...p, hid]))
 
-  if (isLoading) return <div className="p-6 space-y-4"><SkeletonCard /><SkeletonCard /></div>
+  if (isLoading)
+    return (
+      <div className="p-8 space-y-6 max-w-5xl mx-auto">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    )
   if (!video) return null
 
   const hooks = hooksData?.items ?? []
@@ -106,195 +162,309 @@ export function VideoDetailPage() {
   const isFailed = video.status === 'failed'
 
   return (
-    <div className="p-6 space-y-5 max-w-4xl mx-auto animate-fade-up">
-      <Link to="/videos" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft size={13} /> Back to Videos
-      </Link>
+    <div className="p-8 space-y-6 max-w-5xl mx-auto animate-fade-up">
+      {/* Back link & Actions */}
+      <div className="flex items-center justify-between">
+        <Link
+          to="/videos"
+          className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft size={14} /> Back to Videos
+        </Link>
 
-      {/* Video header */}
-      <Card>
-        <CardContent className="p-5">
+        <div className="flex items-center gap-2">
+          {video.status !== 'queued' && video.status !== 'downloading' && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setPlayerModalOpen(true)}
+              className="h-8 rounded-xl text-xs font-semibold px-3 gradient-brand text-white shadow-sm flex items-center gap-1.5"
+            >
+              <Play size={13} className="fill-current" /> Play Video
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditModalOpen(true)}
+            className="h-8 rounded-xl text-xs flex items-center gap-1.5"
+          >
+            <Edit3 size={13} /> Edit Details
+          </Button>
+
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteModalOpen(true)}
+            className="h-8 rounded-xl text-xs flex items-center gap-1.5"
+          >
+            <Trash2 size={13} /> Delete Video
+          </Button>
+        </div>
+      </div>
+
+      {/* Video Details Card with Context Metadata */}
+      <Card className="glass-card shadow-xl rounded-2xl border border-border/80 overflow-hidden">
+        <CardContent className="p-6">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center shrink-0">
-              <Video size={20} className="text-muted-foreground" />
+            <div className="w-14 h-14 rounded-2xl bg-secondary/80 border border-border/80 flex items-center justify-center shrink-0 shadow-sm text-primary">
+              {video.source_type === 'url' ? <Globe size={24} /> : <HardDrive size={24} />}
             </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-sm font-semibold truncate">{video.filename}</h1>
-              <div className="flex items-center flex-wrap gap-3 mt-1.5">
+
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg font-bold tracking-tight text-foreground truncate">
+                  {video.title || video.filename}
+                </h1>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-muted border border-border/60 text-muted-foreground uppercase">
+                  {video.source_type}
+                </span>
+                <StatusBadge status={video.status} />
+              </div>
+
+              {/* Context badges */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {video.creator_account && (
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg bg-secondary/80 text-secondary-foreground font-mono">
+                    <AtSign size={11} /> {video.creator_account}
+                  </span>
+                )}
+                {video.host_names && video.host_names.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                    <User size={11} /> Host: {video.host_names.join(', ')}
+                  </span>
+                )}
+                {video.guest_stars && video.guest_stars.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg bg-accent/10 text-accent border border-accent/20">
+                    <Users size={11} /> Guests: {video.guest_stars.join(', ')}
+                  </span>
+                )}
+              </div>
+
+              {/* Technical video properties */}
+              <div className="flex items-center flex-wrap gap-4 text-[11px] text-muted-foreground pt-1">
                 {video.duration_seconds && (
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Clock size={11} />{formatDuration(video.duration_seconds)}
+                  <span className="flex items-center gap-1.5 font-mono">
+                    <Clock size={12} /> {formatDuration(video.duration_seconds)}
                   </span>
                 )}
                 {video.width && video.height && (
-                  <span className="text-[11px] text-muted-foreground">{video.width}×{video.height}</span>
+                  <span className="font-mono">
+                    {video.width}×{video.height}
+                  </span>
                 )}
-                {video.fps && <span className="text-[11px] text-muted-foreground">{Math.round(video.fps)} fps</span>}
-                <span className="text-[11px] text-muted-foreground">{formatRelativeTime(video.created_at)}</span>
+                {video.fps && <span className="font-mono">{Math.round(video.fps)} fps</span>}
+                <span>Ingested {formatRelativeTime(video.created_at)}</span>
               </div>
-              <div className="mt-3 space-y-1">
-                <div className="flex items-center justify-between">
-                  <StatusBadge status={video.status} />
-                  <span className="text-[11px] text-muted-foreground">{progress}%</span>
+
+              {/* Progress Tracker */}
+              <div className="mt-4 space-y-1.5 pt-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Pipeline Progress</span>
+                  <span className="font-mono">{progress}%</span>
                 </div>
-                <Progress value={isFailed ? 100 : progress}
-                  className={isFailed ? '[&>div]:bg-destructive' : ''} />
+                <Progress
+                  value={isFailed ? 100 : progress}
+                  className={isFailed ? '[&>div]:bg-destructive' : ''}
+                />
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Step 1: Transcribe */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-blue-500/10 flex items-center justify-center">
-              <FileText size={12} className="text-blue-400" />
+      {/* Step 1: Transcription */}
+      <Card className="glass-card shadow-md rounded-2xl border border-border/80">
+        <CardHeader className="flex-row items-center justify-between py-4 border-b border-border/60">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+              <FileText size={16} />
             </div>
-            <CardTitle>Transcription</CardTitle>
-            {transcript && <StatusBadge status="transcribed" />}
+            <div>
+              <CardTitle className="text-sm font-semibold">1. Speech Transcription</CardTitle>
+              <p className="text-[11px] text-muted-foreground">Audio extraction & Whisper speech-to-text</p>
+            </div>
           </div>
-          <Button size="sm" variant="outline"
+          <Button
+            size="sm"
+            variant="outline"
             loading={transcribeMutation.isPending}
             onClick={() => transcribeMutation.mutate()}
-            disabled={video.status === 'transcribing'}
+            disabled={video.status === 'transcribing' || ['queued', 'downloading'].includes(video.status)}
+            className="h-8 rounded-xl text-xs"
           >
-            <RefreshCw size={11} />
-            {transcript ? 'Re-transcribe' : 'Transcribe'}
+            <RefreshCw size={12} className="mr-1.5" />
+            {transcript ? 'Re-transcribe' : 'Start Transcribe'}
           </Button>
         </CardHeader>
         {transcript && (
-          <CardContent className="pt-0">
-            <div className="rounded-lg bg-muted/50 p-4 border border-border">
+          <CardContent className="p-5">
+            <div className="rounded-xl bg-muted/30 p-4 border border-border/60">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-mono text-muted-foreground uppercase">{transcript.language}</span>
-                <span className="text-[10px] text-muted-foreground">{transcript.segments.length} segments</span>
+                <span className="text-[10px] font-mono text-muted-foreground uppercase px-2 py-0.5 rounded bg-muted">
+                  {transcript.language}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {transcript.segments.length} segments identified
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{transcript.full_text}</p>
-              <Link to={`/transcript?videoId=${id}`}
-                className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline mt-2">
-                View full transcript <ChevronRight size={11} />
+              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+                {transcript.full_text}
+              </p>
+              <Link
+                to={`/transcript?videoId=${id}`}
+                className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mt-2.5"
+              >
+                View full interactive transcript <ChevronRight size={13} />
               </Link>
             </div>
           </CardContent>
         )}
       </Card>
 
-      {/* Step 2: Hooks */}
-      <Card>
-        <CardHeader className="flex-row items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-warning/10 flex items-center justify-center">
-              <Zap size={12} className="text-warning" />
+      {/* Step 2: Hooks (Gemini AI Detection) */}
+      <Card className="glass-card shadow-md rounded-2xl border border-border/80">
+        <CardHeader className="flex-row items-center justify-between py-4 border-b border-border/60">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-warning/10 flex items-center justify-center text-warning">
+              <Zap size={16} />
             </div>
-            <CardTitle>Hook Detection</CardTitle>
-            {hooks.length > 0 && (
-              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                {hooks.length} found
-              </span>
-            )}
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                2. AI Viral Hook Detection
+                {hooks.length > 0 && (
+                  <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                    {hooks.length} hooks found
+                  </span>
+                )}
+              </CardTitle>
+              <p className="text-[11px] text-muted-foreground">
+                Gemini AI uses video title, host & guest context to discover viral moments
+              </p>
+            </div>
           </div>
-          <Button size="sm" variant="outline"
+          <Button
+            size="sm"
+            variant="outline"
             loading={detectHooksMutation.isPending}
             onClick={() => detectHooksMutation.mutate()}
             disabled={!transcript || video.status === 'analyzing'}
+            className="h-8 rounded-xl text-xs"
           >
-            <Zap size={11} />
-            {hooks.length > 0 ? 'Re-detect' : 'Detect Hooks'}
+            <Sparkles size={12} className="mr-1.5 text-primary" />
+            {hooks.length > 0 ? 'Re-detect Hooks' : 'Detect Hooks'}
           </Button>
         </CardHeader>
 
         {hooks.length > 0 && (
-          <CardContent className="pt-0 space-y-2">
+          <CardContent className="p-5 space-y-3">
             <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-              <Info size={11}/> Select hooks to extract. All hooks will be used if none selected.
+              <Info size={12} /> Select hooks to extract clips. All hooks will be extracted if none selected.
             </p>
-            {hooks.map((hook) => (
-              <div key={hook.id} onClick={() => toggleHook(hook.id)}
-                className={`flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-all ${
-                  selectedHooks.includes(hook.id)
-                    ? 'border-primary/50 bg-primary/5'
-                    : 'border-border hover:border-border/80 hover:bg-muted/40'
-                }`}
-              >
-                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                  selectedHooks.includes(hook.id) ? 'border-primary bg-primary' : 'border-border'
-                }`}>
-                  {selectedHooks.includes(hook.id) && (
-                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
-                      <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-[11px] font-mono text-muted-foreground">
-                      {formatTimestamp(hook.start_time)} → {formatTimestamp(hook.end_time)}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      ({Math.round(hook.end_time - hook.start_time)}s)
-                    </span>
+            <div className="space-y-2">
+              {hooks.map((hook) => (
+                <div
+                  key={hook.id}
+                  onClick={() => toggleHook(hook.id)}
+                  className={`flex items-start gap-3.5 p-4 rounded-xl border cursor-pointer transition-all ${
+                    selectedHooks.includes(hook.id)
+                      ? 'border-primary bg-primary/10 shadow-xs'
+                      : 'border-border/70 hover:border-border hover:bg-muted/30'
+                  }`}
+                >
+                  <div className="shrink-0 mt-0.5">
                     <ScoreBadge score={hook.score} />
                   </div>
-                  <p className="text-xs text-muted-foreground">{hook.reason}</p>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-semibold text-foreground">
+                        {formatTimestamp(hook.start_time)} → {formatTimestamp(hook.end_time)}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        {Math.round(hook.end_time - hook.start_time)}s
+                      </span>
+                    </div>
+                    <p className="text-xs text-foreground font-medium italic">
+                      "{hook.transcript_excerpt}"
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{hook.reason}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </CardContent>
         )}
       </Card>
 
-      {/* Step 3: Extract */}
+      {/* Step 3: Extract Clips */}
       {hooks.length > 0 && (
-        <Card>
-          <CardHeader className="flex-row items-center justify-between py-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                <Scissors size={12} className="text-primary" />
+        <Card className="glass-card shadow-md rounded-2xl border border-border/80">
+          <CardHeader className="flex-row items-center justify-between py-4 border-b border-border/60">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <Scissors size={16} />
               </div>
-              <CardTitle>Extract Clips</CardTitle>
-              {clips.length > 0 && (
-                <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                  {clips.length} clips
-                </span>
-              )}
+              <div>
+                <CardTitle className="text-sm font-semibold">3. Extract & Render Clips</CardTitle>
+                <p className="text-[11px] text-muted-foreground">
+                  Export 9:16 vertical shorts with burned-in captions
+                </p>
+              </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-0 space-y-3">
+          <CardContent className="p-5 space-y-4">
             <div className="flex items-center gap-3">
-              <Select value={platform} onValueChange={(v) => setPlatform(v as TargetPlatform)}>
-                <SelectTrigger className="max-w-52">
+              <Select
+                value={platform}
+                onValueChange={(v) => setPlatform(v as TargetPlatform)}
+              >
+                <SelectTrigger className="max-w-56 h-9 rounded-xl text-xs bg-muted/40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PLATFORMS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                  {PLATFORMS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Button loading={extractMutation.isPending} onClick={() => extractMutation.mutate()}>
-                <Scissors size={13} />
+
+              <Button
+                loading={extractMutation.isPending}
+                onClick={() => extractMutation.mutate()}
+                className="h-9 rounded-xl text-xs font-semibold px-4 gradient-brand text-white shadow-sm"
+              >
+                <Scissors size={13} className="mr-1.5" />
                 Extract {selectedHooks.length > 0 ? `${selectedHooks.length} Selected` : 'All'}
               </Button>
             </div>
 
             {clips.length > 0 && (
-              <div className="space-y-2">
-                {clips.map(clip => (
-                  <div key={clip.id}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30"
+              <div className="space-y-2 pt-2">
+                {clips.map((clip) => (
+                  <div
+                    key={clip.id}
+                    className="flex items-center gap-3 p-3.5 rounded-xl border border-border/70 bg-muted/20"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <Play size={11} className="text-muted-foreground ml-0.5" />
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <Play size={13} className="ml-0.5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">
-                        {clip.title ?? `${formatTimestamp(clip.start_time)} → ${formatTimestamp(clip.end_time)}`}
+                      <p className="text-xs font-semibold text-foreground truncate">
+                        {clip.title ??
+                          `${formatTimestamp(clip.start_time)} → ${formatTimestamp(clip.end_time)}`}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">{platformLabel(clip.target_platform)}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {platformLabel(clip.target_platform)}
+                      </p>
                     </div>
                     <StatusBadge status={clip.status} />
                     <Button variant="ghost" size="icon-sm" asChild>
-                      <Link to={`/clips?videoId=${id}`}><ChevronRight size={13}/></Link>
+                      <Link to={`/clips?videoId=${id}`}>
+                        <ChevronRight size={14} />
+                      </Link>
                     </Button>
                   </div>
                 ))}
@@ -303,6 +473,32 @@ export function VideoDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Modals */}
+      <VideoEditModal
+        video={video}
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ['video', id] })
+        }}
+      />
+
+      <VideoDeleteDialog
+        video={video}
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ['videos'] })
+          navigate('/videos')
+        }}
+      />
+
+      <VideoPlayerModal
+        video={video}
+        open={playerModalOpen}
+        onOpenChange={setPlayerModalOpen}
+      />
     </div>
   )
 }
