@@ -20,8 +20,10 @@ import {
   Users,
   AtSign,
   Sparkles,
+  Eye,
+  Download,
 } from 'lucide-react'
-import { videoService } from '@/services/video.service'
+import { clipService, videoService } from '@/services/video.service'
 import { toast } from '@/shared/hooks/useToast'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -41,25 +43,43 @@ import {
   formatRelativeTime,
   platformLabel,
 } from '@/shared/utils'
-import type { TargetPlatform } from '@/types'
+import type { Clip, FramingMode, PanStyle, TargetPlatform } from '@/types'
 import { VideoEditModal } from './VideoEditModal'
 import { VideoDeleteDialog } from './VideoDeleteDialog'
 import { VideoPlayerModal } from './VideoPlayerModal'
+import { ClipPreviewModal } from '@/features/clips/ClipPreviewModal'
+import { ClipDeleteDialog } from '@/features/clips/ClipDeleteDialog'
 
-const PLATFORMS: { value: TargetPlatform; label: string }[] = [
-  { value: 'youtube_shorts', label: 'YouTube Shorts' },
-  { value: 'tiktok', label: 'TikTok' },
-  { value: 'instagram_reels', label: 'Instagram Reels' },
-  { value: 'facebook_reels', label: 'Facebook Reels' },
+const PLATFORMS: { value: TargetPlatform; label: string; aspect: string }[] = [
+  { value: 'youtube_shorts', label: 'YouTube Shorts (9:16)', aspect: '9:16' },
+  { value: 'tiktok', label: 'TikTok (9:16)', aspect: '9:16' },
+  { value: 'instagram_reels', label: 'Instagram Reels (9:16)', aspect: '9:16' },
+  { value: 'facebook_reels', label: 'Facebook Reels (9:16)', aspect: '9:16' },
+  { value: 'youtube_highlight', label: 'YouTube Highlight (16:9 Landscape)', aspect: '16:9' },
+  { value: 'bilibili', label: 'Bilibili Clip (16:9 Landscape)', aspect: '16:9' },
+  { value: 'standard_landscape', label: 'Standard Landscape (16:9)', aspect: '16:9' },
+]
+
+const FRAMING_OPTIONS: { value: FramingMode; label: string; desc: string }[] = [
+  { value: 'auto', label: '⚡ Auto-Pan (AI Tracking)', desc: 'Lacak & geser mulus ke pembicara' },
+  { value: 'split', label: '👥 Split-Screen', desc: 'Stacked atas & bawah 2-tier' },
+  { value: 'left', label: '👤 Fokus Kiri', desc: 'Terkunci di host kiri' },
+  { value: 'center', label: '👤 Fokus Tengah', desc: 'Terkunci di tengah' },
+  { value: 'right', label: '👤 Fokus Kanan', desc: 'Terkunci di guest kanan' },
+]
+
+const PAN_STYLE_OPTIONS: { value: PanStyle; label: string; speed: string; desc: string }[] = [
+  { value: 'snappy', label: '⚡ Snappy Cinematic', speed: '0.35s', desc: 'Gesit & dinamis (Rekomendasi FYP)' },
+  { value: 'smooth', label: '🎬 Smooth Standard', speed: '0.55s', desc: 'Mulus, formal, & elegan' },
+  { value: 'slow', label: '🕊️ Slow & Relaxed', speed: '0.85s', desc: 'Santai, tenang, & damai' },
+  { value: 'jump_cut', label: '✂️ Instant Cut', speed: '0.0s', desc: 'Langsung potong sudut (TV multicam)' },
 ]
 
 const PIPELINE_STAGES = ['uploaded', 'transcribed', 'analyzed', 'completed']
 function pipelineProgress(status: string) {
   const idx = PIPELINE_STAGES.indexOf(status)
-  return idx < 0
-    ? status === 'failed'
-      ? 100
-      : 0
+  return idx === -1
+    ? 0
     : Math.round((idx / (PIPELINE_STAGES.length - 1)) * 100)
 }
 
@@ -69,11 +89,17 @@ export function VideoDetailPage() {
   const qc = useQueryClient()
   const [selectedHooks, setSelectedHooks] = useState<string[]>([])
   const [platform, setPlatform] = useState<TargetPlatform>('youtube_shorts')
+  const [framingMode, setFramingMode] = useState<FramingMode>('auto')
+  const [panStyle, setPanStyle] = useState<PanStyle>('snappy')
 
   // Modals
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [playerModalOpen, setPlayerModalOpen] = useState(false)
+
+  // Clip Modals (Preview & Delete)
+  const [previewClip, setPreviewClip] = useState<Clip | null>(null)
+  const [clipToDelete, setClipToDelete] = useState<Clip | null>(null)
 
   const { data: video, isLoading } = useQuery({
     queryKey: ['video', id],
@@ -127,6 +153,8 @@ export function VideoDetailPage() {
     onError: (e: Error) => toast.error('Hook detection failed', e.message),
   })
 
+  const isVertical = PLATFORMS.find((p) => p.value === platform)?.aspect === '9:16'
+
   const extractMutation = useMutation({
     mutationFn: () =>
       videoService.extractClips(id!, {
@@ -135,6 +163,8 @@ export function VideoDetailPage() {
             ? selectedHooks
             : hooksData?.items.map((h) => h.id) ?? [],
         target_platform: platform,
+        framing_mode: isVertical ? framingMode : undefined,
+        pan_style: isVertical && framingMode === 'auto' ? panStyle : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['video', id] })
@@ -142,6 +172,21 @@ export function VideoDetailPage() {
       toast.success('Clips extracted')
     },
     onError: (e: Error) => toast.error('Extraction failed', e.message),
+  })
+
+  const clipExportMutation = useMutation({
+    mutationFn: (clipId: string) =>
+      clipService.export(clipId, {
+        burn_subtitles: true,
+        generate_title: true,
+        generate_caption: true,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clips', id] })
+      toast.success('Clip exported', 'Video with burned subtitles ready for download.')
+      setPreviewClip(null)
+    },
+    onError: (e: Error) => toast.error('Export failed', e.message),
   })
 
   const toggleHook = (hid: string) =>
@@ -414,12 +459,12 @@ export function VideoDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="p-5 space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center flex-wrap gap-3">
               <Select
                 value={platform}
                 onValueChange={(v) => setPlatform(v as TargetPlatform)}
               >
-                <SelectTrigger className="max-w-56 h-9 rounded-xl text-xs bg-muted/40">
+                <SelectTrigger className="w-56 h-9 rounded-xl text-xs bg-muted/40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -430,6 +475,48 @@ export function VideoDetailPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {isVertical && (
+                <Select
+                  value={framingMode}
+                  onValueChange={(v) => setFramingMode(v as FramingMode)}
+                >
+                  <SelectTrigger className="w-56 h-9 rounded-xl text-xs bg-muted/40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FRAMING_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        <span className="font-medium text-xs">{opt.label}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {isVertical && framingMode === 'auto' && (
+                <Select
+                  value={panStyle}
+                  onValueChange={(v) => setPanStyle(v as PanStyle)}
+                >
+                  <SelectTrigger className="w-52 h-9 rounded-xl text-xs bg-muted/40" title="Gaya kecepatan dan transisi geser kamera">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAN_STYLE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        <div className="flex flex-col text-left py-0.5">
+                          <span className="font-medium text-xs flex items-center justify-between gap-2">
+                            <span>{opt.label}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground">{opt.speed}</span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
               <Button
                 loading={extractMutation.isPending}
@@ -446,26 +533,85 @@ export function VideoDetailPage() {
                 {clips.map((clip) => (
                   <div
                     key={clip.id}
-                    className="flex items-center gap-3 p-3.5 rounded-xl border border-border/70 bg-muted/20"
+                    className="flex items-center gap-3 p-3.5 rounded-xl border border-border/70 bg-muted/20 hover:border-border transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <Play size={13} className="ml-0.5" />
-                    </div>
+                    <button
+                      onClick={() => setPreviewClip(clip)}
+                      className="w-9 h-9 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/20 text-primary flex items-center justify-center shrink-0 transition-all shadow-2xs hover:scale-105"
+                      title="Preview clip with safe zones & angle"
+                    >
+                      <Play size={14} className="ml-0.5 fill-current" />
+                    </button>
+
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-foreground truncate">
-                        {clip.title ??
-                          `${formatTimestamp(clip.start_time)} → ${formatTimestamp(clip.end_time)}`}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground font-mono">
-                        {platformLabel(clip.target_platform)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-semibold text-foreground truncate">
+                          {clip.title ??
+                            `${formatTimestamp(clip.start_time)} → ${formatTimestamp(clip.end_time)}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                        <span className="font-mono">
+                          {formatTimestamp(clip.start_time)} → {formatTimestamp(clip.end_time)}
+                        </span>
+                        <span>•</span>
+                        <span>{formatDuration(clip.end_time - clip.start_time)}</span>
+                        <span>•</span>
+                        <span className="font-mono">{platformLabel(clip.target_platform)}</span>
+                        {clip.framing_mode && (
+                          <>
+                            <span>•</span>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary uppercase">
+                              {clip.framing_mode}
+                              {clip.framing_mode === 'auto' && clip.pan_style && ` • ${clip.pan_style}`}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
+
                     <StatusBadge status={clip.status} />
-                    <Button variant="ghost" size="icon-sm" asChild>
-                      <Link to={`/clips?videoId=${id}`}>
-                        <ChevronRight size={14} />
-                      </Link>
-                    </Button>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Preview Button */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPreviewClip(clip)}
+                        className="h-8 rounded-xl text-xs flex items-center gap-1.5 bg-card/80 border-border/70"
+                      >
+                        <Eye size={12} /> Preview
+                      </Button>
+
+                      {/* Download button if exported */}
+                      {clip.status === 'exported' && (
+                        <a
+                          href={clipService.getClipDownloadUrl(clip.id)}
+                          download
+                          className="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+                          title="Download video file"
+                        >
+                          <Download size={12} />
+                        </a>
+                      )}
+
+                      {/* Delete Clip Button */}
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setClipToDelete(clip)}
+                        className="h-8 w-8 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Delete clip and local video files"
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+
+                      <Button variant="ghost" size="icon-sm" asChild>
+                        <Link to={`/clips?videoId=${id}`} title="View in Clips Studio">
+                          <ChevronRight size={14} />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -498,6 +644,26 @@ export function VideoDetailPage() {
         video={video}
         open={playerModalOpen}
         onOpenChange={setPlayerModalOpen}
+      />
+
+      {/* Clip Preview Modal with Safe-Zone & Angle Previews */}
+      <ClipPreviewModal
+        clip={previewClip}
+        open={!!previewClip}
+        onOpenChange={(o) => !o && setPreviewClip(null)}
+        onExport={(clipId) => clipExportMutation.mutate(clipId)}
+        isExporting={clipExportMutation.isPending}
+      />
+
+      {/* Clip Delete Dialog with Local File Cleanup */}
+      <ClipDeleteDialog
+        clip={clipToDelete}
+        open={!!clipToDelete}
+        onOpenChange={(o) => !o && setClipToDelete(null)}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ['clips', id] })
+          qc.invalidateQueries({ queryKey: ['video', id] })
+        }}
       />
     </div>
   )

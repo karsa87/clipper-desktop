@@ -122,7 +122,27 @@ export interface HookListResponse {
 
 // ─── Clip ─────────────────────────────────────────────────────────────────────
 export type ClipStatus = 'pending' | 'extracted' | 'subtitled' | 'exported' | 'failed'
-export type TargetPlatform = 'youtube_shorts' | 'tiktok' | 'instagram_reels' | 'facebook_reels'
+export type TargetPlatform =
+  | 'youtube_shorts'
+  | 'tiktok'
+  | 'instagram_reels'
+  | 'facebook_reels'
+  | 'youtube_highlight'
+  | 'bilibili'
+  | 'standard_landscape'
+
+export type AspectRatioOption = '9:16' | '16:9'
+
+export type FramingMode = 'auto' | 'left' | 'center' | 'right' | 'split'
+export type PanStyle = 'snappy' | 'smooth' | 'slow' | 'jump_cut'
+
+export interface TranscriptUpdateRequest {
+  segments: {
+    start: number
+    end: number
+    text: string
+  }[]
+}
 
 export interface Clip {
   id: string
@@ -136,6 +156,8 @@ export interface Clip {
   caption: string | null
   hashtags: string[]
   target_platform: TargetPlatform
+  framing_mode?: FramingMode
+  pan_style?: PanStyle
   status: ClipStatus
   created_at: string
 }
@@ -143,6 +165,13 @@ export interface Clip {
 export interface ClipExtractionRequest {
   hook_ids: string[]
   target_platform: TargetPlatform
+  framing_mode?: FramingMode
+  pan_style?: PanStyle
+}
+
+export interface ClipReframeRequest {
+  framing_mode: FramingMode
+  pan_style?: PanStyle
 }
 
 export interface ClipExportRequest {

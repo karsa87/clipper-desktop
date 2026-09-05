@@ -112,6 +112,20 @@ export const videoService = {
     return res.data.data!
   },
 
+  async updateTranscript(videoId: string, segments: { start: number; end: number; text: string }[]): Promise<Transcript> {
+    const res = await getApiClient().put<APIResponse<Transcript>>(
+      `/api/v1/videos/${videoId}/transcript`,
+      { segments }
+    )
+    return res.data.data!
+  },
+
+  getSubtitleDownloadUrl(videoId: string, format: 'srt' | 'ass' = 'srt'): string {
+    const { backendUrl } = (window as Window & { __settingsStore?: { backendUrl: string } })
+      .__settingsStore ?? { backendUrl: 'http://localhost:8000' }
+    return `${backendUrl}/api/v1/videos/${videoId}/transcript/download?format=${format}`
+  },
+
   // Hooks
   async detectHooks(videoId: string, body?: HookDetectionRequest): Promise<HookListResponse> {
     const res = await getApiClient().post<APIResponse<HookListResponse>>(
@@ -171,7 +185,45 @@ export const clipService = {
       .__settingsStore ?? { backendUrl: 'http://localhost:8000' }
     return `${backendUrl}/files/${encodeURIComponent(filePath)}`
   },
+
+  getClipDownloadUrl(clipId: string): string {
+    const { backendUrl } = (window as Window & { __settingsStore?: { backendUrl: string } })
+      .__settingsStore ?? { backendUrl: 'http://localhost:8000' }
+    return `${backendUrl}/api/v1/clips/${clipId}/download`
+  },
+
+  getClipStreamUrl(clipId: string): string {
+    const { backendUrl } = (window as Window & { __settingsStore?: { backendUrl: string } })
+      .__settingsStore ?? { backendUrl: 'http://localhost:8000' }
+    return `${backendUrl}/api/v1/clips/${clipId}/stream`
+  },
+
+  getClipSubtitleDownloadUrl(clipId: string, format: 'srt' | 'ass' = 'srt'): string {
+    const { backendUrl } = (window as Window & { __settingsStore?: { backendUrl: string } })
+      .__settingsStore ?? { backendUrl: 'http://localhost:8000' }
+    return `${backendUrl}/api/v1/clips/${clipId}/subtitles/download?format=${format}`
+  },
+
+  async delete(clipId: string): Promise<{ clip_id: string; deleted_files_count: number }> {
+    const res = await getApiClient().delete<APIResponse<{ clip_id: string; deleted_files_count: number }>>(
+      `/api/v1/clips/${clipId}`
+    )
+    return res.data.data!
+  },
+
+  async reframe(
+    clipId: string,
+    framingMode: import('@/types').FramingMode,
+    panStyle?: import('@/types').PanStyle,
+  ): Promise<Clip> {
+    const res = await getApiClient().post<APIResponse<Clip>>(
+      `/api/v1/clips/${clipId}/reframe`,
+      { framing_mode: framingMode, pan_style: panStyle }
+    )
+    return res.data.data!
+  },
 }
+
 
 export const healthService = {
   async check(): Promise<boolean> {

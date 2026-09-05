@@ -40,10 +40,13 @@ export function formatDate(dateStr: string): string {
 
 export function platformLabel(p: string): string {
   const map: Record<string, string> = {
-    youtube_shorts:   'YouTube Shorts',
-    tiktok:           'TikTok',
-    instagram_reels:  'Instagram Reels',
-    facebook_reels:   'Facebook Reels',
+    youtube_shorts: 'YouTube Shorts (9:16)',
+    tiktok: 'TikTok (9:16)',
+    instagram_reels: 'Instagram Reels (9:16)',
+    facebook_reels: 'Facebook Reels (9:16)',
+    youtube_highlight: 'YouTube (16:9 Landscape)',
+    bilibili: 'Bilibili (16:9 Landscape)',
+    standard_landscape: 'Landscape (16:9)',
   }
   return map[p] ?? p
 }
